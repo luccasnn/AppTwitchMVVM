@@ -1,4 +1,4 @@
-package com.example.myapplication
+package com.example.myapplication.ui.search
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
@@ -24,16 +26,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.example.myapplication.R
+import com.example.myapplication.data.local.CategoriaDb
 
 fun getImagemCategoria(nome: String): Int {
     return when {
@@ -43,87 +45,38 @@ fun getImagemCategoria(nome: String): Int {
         nome.equals("Valorant", ignoreCase = true) -> R.drawable.valorant
         nome.equals("GTA V", ignoreCase = true) -> R.drawable.gta
         nome.equals("IRL", ignoreCase = true) -> R.drawable.irl
-        else -> R.drawable.ic_launcher_background // Imagem padrão
+        else -> R.drawable.ic_launcher_background
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TwitchSearchScreen(navController: NavController) {
-    var searchText by remember { mutableStateOf("") }
-    var isSearchBarFocused by remember { mutableStateOf(false) }
+fun TwitchSearchScreen(
+    navController: NavController,
+    viewModel: SearchViewModel
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val focusManager = LocalFocusManager.current
 
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-
-    // --- Lógica do Banco de Dados (Corrigida) ---
-    var pesquisaRecenteDAO by remember { mutableStateOf<PesquisaRecenteDAO?>(null) }
-    var categoriaDAO by remember { mutableStateOf<CategoriaDAO?>(null) }
-
-    var listaPesquisas by remember { mutableStateOf<List<PesquisaRecente>>(emptyList()) }
-    var listaCategorias by remember { mutableStateOf<List<CategoriaDb>>(emptyList()) }
-
-    var showDialog by remember { mutableStateOf(false) }
-    var categoriaParaEditar by remember { mutableStateOf<CategoriaDb?>(null) }
-
-    // Carrega o banco e os DAOs em segundo plano para não travar a UI
-    LaunchedEffect(context) {
-        withContext(Dispatchers.IO) {
-            val db = AppDatabase.getDatabase(context)
-            pesquisaRecenteDAO = db.pesquisaRecenteDAO()
-            categoriaDAO = db.categoriaDAO()
-        }
+    val performSearch = {
+        viewModel.performSearch()
+        focusManager.clearFocus()
     }
 
-    // Carrega os dados do banco de forma segura depois que os DAOs estiverem prontos
-    LaunchedEffect(pesquisaRecenteDAO, categoriaDAO) {
-        pesquisaRecenteDAO?.let { dao ->
-            listaPesquisas = dao.buscarTodas()
-        }
-        categoriaDAO?.let { dao ->
-            if (dao.buscarTodas().isEmpty()) {
-                dao.inserir(CategoriaDb(nome = "League of Legends", tipo = "MOBA", espectadores = "123k"))
-                dao.inserir(CategoriaDb(nome = "CS2", tipo = "FPS", espectadores = "98k"))
-            }
-            listaCategorias = dao.buscarTodas()
-        }
+    val cancelSearch = {
+        viewModel.cancelSearch()
+        focusManager.clearFocus()
     }
 
-    fun recarregarCategorias() {
-        categoriaDAO?.let { dao ->
-            coroutineScope.launch {
-                listaCategorias = dao.buscarTodas()
-            }
-        }
-    }
-    
-    fun recarregarPesquisas() {
-        pesquisaRecenteDAO?.let { dao ->
-            coroutineScope.launch {
-                listaPesquisas = dao.buscarTodas()
-            }
-        }
-    }
-
-    if (showDialog) {
+    if (uiState.showDialog) {
         CategoriaDialog(
-            categoria = categoriaParaEditar,
-            onDismiss = { showDialog = false; categoriaParaEditar = null },
+            categoria = uiState.categoriaParaEditar,
+            onDismiss = { viewModel.onCloseDialog() },
             onConfirm = { categoria ->
-                coroutineScope.launch {
-                    if (categoria.id == 0) categoriaDAO?.inserir(categoria) else categoriaDAO?.atualizar(categoria)
-                    recarregarCategorias()
-                    showDialog = false
-                    categoriaParaEditar = null
-                }
+                viewModel.onSaveCategoria(categoria)
             },
             onDelete = { categoria ->
-                coroutineScope.launch {
-                    categoriaDAO?.deletar(categoria)
-                    recarregarCategorias()
-                    showDialog = false
-                    categoriaParaEditar = null
-                }
+                viewModel.onDeleteCategoria(categoria)
             }
         )
     }
@@ -131,7 +84,7 @@ fun TwitchSearchScreen(navController: NavController) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { categoriaParaEditar = null; showDialog = true },
+                onClick = { viewModel.onOpenDialog(null) },
                 containerColor = Color(0xFF9147FF)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Adicionar Categoria", tint = Color.White)
@@ -151,60 +104,57 @@ fun TwitchSearchScreen(navController: NavController) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Box(modifier = Modifier.weight(1f)) {
                         BasicTextField(
-                            value = searchText,
-                            onValueChange = { searchText = it },
+                            value = uiState.searchText,
+                            onValueChange = { viewModel.onSearchTextChanged(it) },
                             textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
                             cursorBrush = SolidColor(Color.White),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth().onFocusChanged { focusState -> isSearchBarFocused = focusState.isFocused }
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { performSearch() }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onFocusChanged { focusState ->
+                                    viewModel.onFocusChanged(focusState.isFocused)
+                                }
                         )
-                        if (searchText.isEmpty()) {
+                        if (uiState.searchText.isEmpty()) {
                             Text("Procurar", color = Color.Gray, fontSize = 16.sp)
                         }
                     }
-                    if (searchText.isNotEmpty()) {
+                    if (uiState.searchText.isNotEmpty()) {
                         Icon(
                             painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
                             contentDescription = "Clear Search",
                             tint = Color.White,
-                            modifier = Modifier.clickable { searchText = "" }
+                            modifier = Modifier.clickable { viewModel.clearSearchText() }
                         )
                     }
                 }
-                if (isSearchBarFocused) {
-                    TextButton(onClick = {
-                        if (searchText.isNotBlank()) {
-                            coroutineScope.launch {
-                                pesquisaRecenteDAO?.inserir(PesquisaRecente(termo = searchText))
-                                recarregarPesquisas()
-                                searchText = ""
-                                isSearchBarFocused = false
-                            }
-                        } else {
-                            isSearchBarFocused = false
-                        }
-                    }) {
-                        Text("Buscar", color = Color.White)
+
+                if (uiState.isSearchBarFocused) {
+                    val (buttonText, buttonAction) = if (uiState.searchText.isNotBlank()) {
+                        "Buscar" to performSearch
+                    } else {
+                        "Cancelar" to cancelSearch
+                    }
+
+                    TextButton(onClick = buttonAction) {
+                        Text(buttonText, color = Color.White)
                     }
                 }
             }
 
-            if (isSearchBarFocused && searchText.isBlank()) {
+            if (uiState.isSearchBarFocused && uiState.searchText.isBlank()) {
                 LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
                     item { Text("PESQUISAS RECENTES", color = Color.Gray, fontWeight = FontWeight.Bold) }
-                    items(listaPesquisas) { pesquisa ->
+                    items(uiState.pesquisasRecentes) { pesquisa ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(pesquisa.termo, color = Color.White, modifier = Modifier.padding(vertical = 8.dp))
-                            IconButton(onClick = {
-                                coroutineScope.launch {
-                                    pesquisaRecenteDAO?.deletar(pesquisa)
-                                    recarregarPesquisas()
-                                }
-                            }) {
+                            IconButton(onClick = { viewModel.deletePesquisa(pesquisa) }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Remover pesquisa", tint = Color.Gray)
                             }
                         }
@@ -217,11 +167,10 @@ fun TwitchSearchScreen(navController: NavController) {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    val filteredList = listaCategorias.filter { it.nome.contains(searchText, ignoreCase = true) }
-                    items(filteredList) { categoria ->
+                    items(uiState.categorias, key = { it.id }) { categoria ->
                         Card(
                             modifier = Modifier.pointerInput(Unit) {
-                                detectTapGestures(onLongPress = { categoriaParaEditar = categoria; showDialog = true })
+                                detectTapGestures(onLongPress = { viewModel.onOpenDialog(categoria) })
                             },
                             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
                         ) {
@@ -252,9 +201,9 @@ fun CategoriaDialog(
     onConfirm: (CategoriaDb) -> Unit,
     onDelete: (CategoriaDb) -> Unit
 ) {
-    var nome by remember { mutableStateOf(categoria?.nome ?: "") }
-    var tipo by remember { mutableStateOf(categoria?.tipo ?: "") }
-    var espectadores by remember { mutableStateOf(categoria?.espectadores ?: "") }
+    var nome by remember(categoria) { mutableStateOf(categoria?.nome ?: "") }
+    var tipo by remember(categoria) { mutableStateOf(categoria?.tipo ?: "") }
+    var espectadores by remember(categoria) { mutableStateOf(categoria?.espectadores ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -270,7 +219,8 @@ fun CategoriaDialog(
         },
         confirmButton = {
             Button(onClick = {
-                val novaOuEditadaCategoria = categoria?.copy(nome = nome, tipo = tipo, espectadores = espectadores) ?: CategoriaDb(nome = nome, tipo = tipo, espectadores = espectadores)
+                val novaOuEditadaCategoria = categoria?.copy(nome = nome, tipo = tipo, espectadores = espectadores)
+                    ?: CategoriaDb(nome = nome, tipo = tipo, espectadores = espectadores)
                 onConfirm(novaOuEditadaCategoria)
             }) {
                 Text("Salvar")

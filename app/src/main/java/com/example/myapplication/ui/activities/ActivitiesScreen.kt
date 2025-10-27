@@ -1,5 +1,4 @@
-package com.example.myapplication
-
+package com.example.myapplication.ui.activities
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,8 +25,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,28 +38,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import java.util.UUID
-
-data class CrudItem(val id: String = UUID.randomUUID().toString(), val text: String)
+import com.example.myapplication.data.CrudItem
 
 @Composable
-fun TwitchActivitiesScreen(navController: NavController) {
+fun TwitchActivitiesScreen(
+    navController: NavController,
+    viewModel: ActivitiesViewModel
+) {
     var abaSelecionada by rememberSaveable { mutableStateOf("notificacoes") }
 
-    val notificacoes = remember {
-        mutableStateListOf(
-            CrudItem(text = "É o dia do video game! Compartilhe um clipe para desbloquear o distintivo GGWP!"),
-            CrudItem(text = "Sua inscrição no canal do Alanzoka foi renovada."),
-            CrudItem(text = "Gaules entrou ao vivo: 'CS2 - RUMO AO MAJOR!'")
-        )
-    }
-
-    val sussurros = remember {
-        mutableStateListOf(
-            CrudItem(text = "user1: E aí, tudo bem?"),
-            CrudItem(text = "user2: Vamos jogar mais tarde?"),
-        )
-    }
+    val notificacoes by viewModel.notificacoes.collectAsState()
+    val sussurros by viewModel.sussurros.collectAsState()
 
     Column(
         modifier = Modifier
@@ -121,28 +109,22 @@ fun TwitchActivitiesScreen(navController: NavController) {
                 CrudList(
                     items = notificacoes,
                     icon = "🟣",
-                    onAddItem = { text -> notificacoes.add(0, CrudItem(text = text)) },
+                    onAddItem = { text -> viewModel.addNotificacao(text) },
                     onUpdateItem = { item, newText ->
-                        val index = notificacoes.indexOf(item)
-                        if (index != -1) {
-                            notificacoes[index] = item.copy(text = newText)
-                        }
+                        viewModel.updateNotificacao(item, newText)
                     },
-                    onDeleteItem = { item -> notificacoes.remove(item) }
+                    onDeleteItem = { item -> viewModel.deleteNotificacao(item) }
                 )
             }
             "sussurros" -> {
                 CrudList(
                     items = sussurros,
-                    icon = "귓", // A different icon for whispers
-                    onAddItem = { text -> sussurros.add(0, CrudItem(text = text)) },
+                    icon = "귓",
+                    onAddItem = { text -> viewModel.addSussurro(text) },
                     onUpdateItem = { item, newText ->
-                        val index = sussurros.indexOf(item)
-                        if (index != -1) {
-                            sussurros[index] = item.copy(text = newText)
-                        }
+                        viewModel.updateSussurro(item, newText)
                     },
-                    onDeleteItem = { item -> sussurros.remove(item) }
+                    onDeleteItem = { item -> viewModel.deleteSussurro(item) }
                 )
             }
         }

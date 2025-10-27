@@ -1,5 +1,4 @@
-package com.example.myapplication
-
+package com.example.myapplication.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -10,6 +9,5 @@ data class CategoriaDb(
     val nome: String,
     val tipo: String,
     val espectadores: String
-    // O R.drawable.imagem não é salvo no banco,
-    // ele será associado na tela (SearchScreen)
+
 )

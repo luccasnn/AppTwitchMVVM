@@ -1,7 +1,6 @@
-package com.example.myapplication
+package com.example.myapplication.ui
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -9,40 +8,39 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.NavHostController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-
+import com.example.myapplication.R
+import com.example.myapplication.data.LiveStream
+import com.example.myapplication.data.TwitchClip
+import com.example.myapplication.data.local.AppDatabase
+import com.example.myapplication.data.repository.AppRepository
+import com.example.myapplication.ui.activities.TwitchActivitiesScreen
+import com.example.myapplication.ui.home.TwitchHomeScreen
+import com.example.myapplication.ui.profile.ProfileScreen
+import com.example.myapplication.ui.search.TwitchSearchScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -56,34 +54,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-data class Categoria(
-    val nome: String,
-    val imagemRes: Int,
-    val tipo: String,
-    val espectadores: String
-)
-
-data class LiveStream(
-    val streamerName: String,
-    val streamerProfilePicRes: Int,
-    val streamPreviewRes: Int,
-    val streamTitle: String,
-    val gameName: String,
-    val viewerCount: String,
-    val tags: List<String>
-)
-
-data class TwitchClip(
-    val thumbnailUrlRes: Int,
-    val duration: String,
-    val views: String,
-    val age: String,
-    val creatorLogoUrlRes: Int,
-    val title: String,
-    val channelName: String,
-    val clipperName: String
-)
-
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Search : Screen("search")
@@ -95,6 +65,12 @@ sealed class Screen(val route: String) {
 @Composable
 fun TwitchApp() {
     val navController = rememberNavController()
+    val context = LocalContext.current
+
+    val db = AppDatabase.getDatabase(context)
+    val repository = remember { AppRepository(db.categoriaDAO(), db.pesquisaRecenteDAO()) }
+    val factory = remember { ViewModelFactory(repository) }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color.Black
@@ -109,16 +85,28 @@ fun TwitchApp() {
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(Screen.Home.route) {
-                    TwitchHomeScreen(navController = navController)
+                    TwitchHomeScreen(
+                        navController = navController,
+                        viewModel = viewModel(factory = factory)
+                    )
                 }
                 composable(Screen.Search.route) {
-                    TwitchSearchScreen(navController = navController)
+                    TwitchSearchScreen(
+                        navController = navController,
+                        viewModel = viewModel(factory = factory)
+                    )
                 }
                 composable(Screen.Activities.route) {
-                    TwitchActivitiesScreen(navController = navController)
+                    TwitchActivitiesScreen(
+                        navController = navController,
+                        viewModel = viewModel(factory = factory)
+                    )
                 }
                 composable(Screen.Profile.route) {
-                    ProfileScreen(navController = navController)
+                    ProfileScreen(
+                        navController = navController,
+                        viewModel = viewModel(factory = factory)
+                    )
                 }
             }
         }
@@ -151,7 +139,9 @@ fun TwitchBottomBar(navController: NavController) {
                 color = if (isSelected) Color(0xFF9147FF) else Color.White,
                 modifier = if (rota != null) Modifier.clickable {
                     navController.navigate(rota) {
-                        popUpTo(Screen.Home.route) { saveState = true }
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
                         launchSingleTop = true
                         restoreState = true
                     }
@@ -166,12 +156,18 @@ fun TwitchBottomBar(navController: NavController) {
                 .size(34.dp)
                 .clip(CircleShape)
                 .border(width = 2.dp, color = if (currentRoute == Screen.Profile.route) Color(0xFF9147FF) else Color.Gray, shape = CircleShape)
-                .clickable { navController.navigate(Screen.Profile.route) }
+                .clickable {
+                    navController.navigate(Screen.Profile.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
         )
     }
 }
-
-
 
 @Composable
 fun HeaderTabs(selectedTab: String, onTabSelected: (String) -> Unit) {
@@ -356,7 +352,6 @@ fun ClipPreviewItem(clip: TwitchClip) {
         }
     }
 }
-
 
 @Preview(showBackground = true)
 @Composable

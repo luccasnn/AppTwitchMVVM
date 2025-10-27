@@ -1,10 +1,11 @@
-package com.example.myapplication
+package com.example.myapplication.data.local
 
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CategoriaDAO {
@@ -19,5 +20,8 @@ interface CategoriaDAO {
     suspend fun deletar(categoria: CategoriaDb)
 
     @Query("SELECT * FROM categorias ORDER BY nome ASC")
-    suspend fun buscarTodas(): List<CategoriaDb>
+    fun buscarTodas(): Flow<List<CategoriaDb>>
+
+    @Query("SELECT COUNT(*) FROM categorias")
+    suspend fun contar(): Int
 }
